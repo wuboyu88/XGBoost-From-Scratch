@@ -1,2 +1,4 @@
 # XGBoost-From-Scratch
-This repo contains a few tree based boosting algorithms implemented in python from scratch. This code relates to a medium.com article which I wrote explaining my journey to understanding how XGBoost works under the hood. https://medium.com/analytics-vidhya/what-makes-xgboost-so-extreme-e1544a4433bb
+## This repo contains a XGBoost algorithm implemented in python from scratch.
+1.XGBoostClassifier for binary classification <br />
+2.XGBoostRegressor for regression <br />
