@@ -4,12 +4,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 
 
-class Node:
+class RegressionTree:
     """
-    A node object that is recursively called within itself to construct a regression tree. Based on Tianqi Chen's
-    XGBoost the internal gain used to find the optimal split value uses both the gradient and hessian. The only thing
-    not implemented in this version is sparsity aware fitting or the ability to handle NA values with a default
-    direction.
+    A RegressionTree object that is recursively called within itself to construct a regression tree. Based on
+    Tianqi Chen's XGBoost the internal gain used to find the optimal split value uses both the gradient and hessian.
+    The only thing not implemented in this version is sparsity aware fitting or the ability to handle NA values with a
+    default direction.
     Inputs
     ------------------------------------------------------------------------------------------------------------------
     x: pandas DataFrame of the training data
@@ -29,18 +29,18 @@ class Node:
     A single tree object that will be used for gradient boosting.
     """
 
-    def __init__(self, x, gradient, hessian, idxs, subsample_cols=0.8, min_leaf=5, min_child_weight=1, depth=5,
+    def __init__(self, x, gradient, hessian, idxs=None, subsample_cols=0.8, min_leaf=5, min_child_weight=1, depth=5,
                  lambda_=1.5, gamma=1):
 
         self.x, self.gradient, self.hessian = x, gradient, hessian
-        self.idxs = idxs
+        self.idxs = np.arange(len(x)) if idxs is None else idxs
         self.depth = depth
         self.min_leaf = min_leaf
         self.lambda_ = lambda_
         self.gamma = gamma
         self.min_child_weight = min_child_weight
         # 节点中对应的样本数
-        self.row_count = len(idxs)
+        self.row_count = len(self.idxs)
         self.col_count = x.shape[1]
         self.subsample_cols = subsample_cols
         self.column_subsample = np.random.permutation(self.col_count)[:round(self.subsample_cols * self.col_count)]
@@ -76,14 +76,14 @@ class Node:
         lhs = np.nonzero(x <= self.split)[0]
         rhs = np.nonzero(x > self.split)[0]
 
-        self.lhs = Node(x=self.x, gradient=self.gradient, hessian=self.hessian, idxs=self.idxs[lhs],
-                        subsample_cols=self.subsample_cols, min_leaf=self.min_leaf,
-                        min_child_weight=self.min_child_weight, depth=self.depth - 1, lambda_=self.lambda_,
-                        gamma=self.gamma)
-        self.rhs = Node(x=self.x, gradient=self.gradient, hessian=self.hessian, idxs=self.idxs[rhs],
-                        subsample_cols=self.subsample_cols, min_leaf=self.min_leaf,
-                        min_child_weight=self.min_child_weight, depth=self.depth - 1, lambda_=self.lambda_,
-                        gamma=self.gamma)
+        self.lhs = RegressionTree(x=self.x, gradient=self.gradient, hessian=self.hessian, idxs=self.idxs[lhs],
+                                  subsample_cols=self.subsample_cols, min_leaf=self.min_leaf,
+                                  min_child_weight=self.min_child_weight, depth=self.depth - 1, lambda_=self.lambda_,
+                                  gamma=self.gamma)
+        self.rhs = RegressionTree(x=self.x, gradient=self.gradient, hessian=self.hessian, idxs=self.idxs[rhs],
+                                  subsample_cols=self.subsample_cols, min_leaf=self.min_leaf,
+                                  min_child_weight=self.min_child_weight, depth=self.depth - 1, lambda_=self.lambda_,
+                                  gamma=self.gamma)
 
     def find_greedy_split(self, var_idx):
         """
@@ -160,26 +160,8 @@ class Node:
         if self.is_leaf:
             return self.leaf_weight
 
-        node = self.lhs if xi[self.var_idx] <= self.split else self.rhs
-        return node.predict_row(xi)
-
-
-class RegressionTree:
-    """
-    CART回归树
-    """
-
-    def __init__(self):
-        self.node = None
-
-    def fit(self, x, gradient, hessian, subsample_cols=0.8, min_leaf=5, min_child_weight=1, depth=5, lambda_=1.5,
-            gamma=1):
-        self.node = Node(x, gradient, hessian, np.arange(len(x)), subsample_cols, min_leaf, min_child_weight, depth,
-                         lambda_, gamma)
-        return self
-
-    def predict(self, x):
-        return self.node.predict(x)
+        regression_tree = self.lhs if xi[self.var_idx] <= self.split else self.rhs
+        return regression_tree.predict_row(xi)
 
 
 class XGBoostClassifier:
@@ -226,9 +208,9 @@ class XGBoostClassifier:
         for booster in range(self.boosting_rounds):
             gradient = self.gradient(preds, y)
             hessian = self.hessian(preds)
-            boosting_tree = RegressionTree().fit(X, gradient, hessian, subsample_cols=self.subsample_cols,
-                                                 min_leaf=self.min_leaf, min_child_weight=self.min_child_weight,
-                                                 depth=self.depth, lambda_=self.lambda_, gamma=self.gamma)
+            boosting_tree = RegressionTree(X, gradient, hessian, subsample_cols=self.subsample_cols,
+                                           min_leaf=self.min_leaf, min_child_weight=self.min_child_weight,
+                                           depth=self.depth, lambda_=self.lambda_, gamma=self.gamma)
             preds += self.learning_rate * boosting_tree.predict(X)
             self.estimators.append(boosting_tree)
 
@@ -282,9 +264,9 @@ class XGBoostRegressor:
         for booster in range(self.boosting_rounds):
             gradient = self.gradient(preds, self.y)
             hessian = self.hessian(preds)
-            boosting_tree = RegressionTree().fit(X, gradient, hessian, subsample_cols=self.subsample_cols,
-                                                 min_leaf=self.min_leaf, min_child_weight=self.min_child_weight,
-                                                 depth=self.depth, lambda_=self.lambda_, gamma=self.gamma)
+            boosting_tree = RegressionTree(X, gradient, hessian, subsample_cols=self.subsample_cols,
+                                           min_leaf=self.min_leaf, min_child_weight=self.min_child_weight,
+                                           depth=self.depth, lambda_=self.lambda_, gamma=self.gamma)
             preds += self.learning_rate * boosting_tree.predict(X)
             self.estimators.append(boosting_tree)
 
